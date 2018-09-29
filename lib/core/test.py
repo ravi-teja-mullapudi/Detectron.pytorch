@@ -109,6 +109,65 @@ def im_detect_all(model, im, box_proposals=None, timers=None):
 
     return cls_boxes, cls_segms, cls_keyps
 
+def im_detect_raw_masks(model, im, box_proposals=None, timers=None):
+    """Process the outputs of model for testing
+    Args:
+      model: the network module
+      im_data: Pytorch variable. Input batch to the model.
+      im_info: Pytorch variable. Input batch to the model.
+      gt_boxes: Pytorch variable. Input batch to the model.
+      num_boxes: Pytorch variable. Input batch to the model.
+      args: arguments from command line.
+      timer: record the cost of time for different steps
+    The rest of inputs are of type pytorch Variables and either input to or output from the model.
+    """
+    if timers is None:
+        timers = defaultdict(Timer)
+
+    timers['im_detect_bbox'].tic()
+    if cfg.TEST.BBOX_AUG.ENABLED:
+        scores, boxes, im_scale, blob_conv = im_detect_bbox_aug(
+            model, im, box_proposals)
+    else:
+        scores, boxes, im_scale, blob_conv = im_detect_bbox(
+            model, im, cfg.TEST.SCALE, cfg.TEST.MAX_SIZE, box_proposals)
+    timers['im_detect_bbox'].toc()
+
+    # score and boxes are from the whole image after score thresholding and nms
+    # (they are not separated by class) (numpy.ndarray)
+    # cls_boxes boxes and scores are separated by class and in the format used
+    # for evaluating results
+    timers['misc_bbox'].tic()
+    scores, boxes, cls_boxes = box_results_with_nms_and_limit(scores, boxes)
+    timers['misc_bbox'].toc()
+
+    if cfg.MODEL.MASK_ON and boxes.shape[0] > 0:
+        timers['im_detect_mask'].tic()
+        if cfg.TEST.MASK_AUG.ENABLED:
+            masks = im_detect_mask_aug(model, im, boxes, im_scale, blob_conv)
+        else:
+            masks = im_detect_mask(model, im_scale, boxes, blob_conv)
+        timers['im_detect_mask'].toc()
+
+        cls_segms = masks
+    else:
+        cls_segms = None
+
+    if cfg.MODEL.KEYPOINTS_ON and boxes.shape[0] > 0:
+        timers['im_detect_keypoints'].tic()
+        if cfg.TEST.KPS_AUG.ENABLED:
+            heatmaps = im_detect_keypoints_aug(model, im, boxes, im_scale, blob_conv)
+        else:
+            heatmaps = im_detect_keypoints(model, im_scale, boxes, blob_conv)
+        timers['im_detect_keypoints'].toc()
+
+        timers['misc_keypoints'].tic()
+        cls_keyps = keypoint_results(cls_boxes, heatmaps, boxes)
+        timers['misc_keypoints'].toc()
+    else:
+        cls_keyps = None
+
+    return cls_boxes, cls_segms, cls_keyps
 
 def im_conv_body_only(model, im, target_scale, target_max_size):
     inputs, im_scale = _get_blobs(im, None, target_scale, target_max_size)
