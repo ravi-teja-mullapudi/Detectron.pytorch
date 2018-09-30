@@ -39,23 +39,35 @@ from stream import VideoInputStream
 cv2.ocl.setUseOpenCL(False)
 
 def process_detections(cls_boxes, cls_segms):
-    box_list = [b[:, :4] for b in cls_boxes if len(b) > 0]
-    score_list = [b[:, 4] for b in cls_boxes if len(b) > 0]
+    boxes = []
+    scores = []
+    masks = []
+
+    box_list = []
+
+    for b in cls_boxes:
+        if len(b) > 0:
+            for bidx in range(len(b)):
+                box = b[bidx, :4]
+                box = [ box[1], box[0], box[3], box[2] ]
+                box_list.append(box)
+
+    score_list = [ b[:, 4] for b in cls_boxes if len(b) > 0]
     if len(box_list) > 0:
-        boxes = np.concatenate(box_list)
+        boxes = np.array(box_list)
         scores = np.concatenate(score_list)
     else:
         boxes = None
         scores = None
 
-    if cls_segms is not None:
-        masks = [s for slist in cls_segms for s in slist]
-    else:
-        masks = None
-
     class_ids = []
     for j in range(len(cls_boxes)):
         class_ids += [j] * len(cls_boxes[j])
+
+    for j in range(len(class_ids)):
+        segms = cls_segms[j]
+        cls = class_ids[j]
+        masks.append(segms[cls, :, :])
 
     return boxes, class_ids, scores, masks
 
