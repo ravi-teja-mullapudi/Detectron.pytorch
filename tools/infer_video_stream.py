@@ -67,7 +67,7 @@ def process_detections(cls_boxes, cls_segms):
     for j in range(len(class_ids)):
         segms = cls_segms[j]
         cls = class_ids[j]
-        masks.append(segms[cls, :, :])
+        masks.append(segms[cls, :, :].copy())
 
     return boxes, class_ids, scores, masks
 
@@ -170,6 +170,7 @@ def main():
         timers = defaultdict(Timer)
         cls_boxes, cls_segms, _ = im_detect_raw_masks(maskRCNN, im, timers=timers)
 
+        print(im.shape, len(cls_boxes), len(cls_segms))
         boxes, class_ids, scores, masks = \
                 process_detections(cls_boxes, cls_segms)
 
