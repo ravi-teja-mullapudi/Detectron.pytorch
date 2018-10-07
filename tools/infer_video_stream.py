@@ -38,7 +38,7 @@ from stream import VideoInputStream
 # thread safe and causes unwanted GPU memory allocations.
 cv2.ocl.setUseOpenCL(False)
 
-def process_detections(cls_boxes, cls_segms):
+def process_detections(cls_boxes, cls_segms, height, width):
     boxes = []
     scores = []
     masks = []
@@ -49,7 +49,8 @@ def process_detections(cls_boxes, cls_segms):
         if len(b) > 0:
             for bidx in range(len(b)):
                 box = b[bidx, :4]
-                box = [ box[1], box[0], box[3], box[2] ]
+                box = [ float(box[1])/height, float(box[0])/width,
+                        float(box[3])/height, float(box[2])/width ]
                 box_list.append(box)
 
     score_list = [ b[:, 4] for b in cls_boxes if len(b) > 0]
@@ -57,8 +58,8 @@ def process_detections(cls_boxes, cls_segms):
         boxes = np.array(box_list)
         scores = np.concatenate(score_list)
     else:
-        boxes = None
-        scores = None
+        boxes = np.array([])
+        scores = np.array([])
 
     class_ids = []
     for j in range(len(cls_boxes)):
@@ -170,9 +171,10 @@ def main():
         timers = defaultdict(Timer)
         cls_boxes, cls_segms, _ = im_detect_raw_masks(maskRCNN, im, timers=timers)
 
-        print(im.shape, len(cls_boxes), len(cls_segms))
+        if cls_segms is not None:
+            print(im.shape, len(cls_boxes), len(cls_segms))
         boxes, class_ids, scores, masks = \
-                process_detections(cls_boxes, cls_segms)
+                process_detections(cls_boxes, cls_segms, s.height, s.width)
 
         frame_detections[frame_id] = [boxes, class_ids, scores, masks]
         frame_id = frame_id + 1
